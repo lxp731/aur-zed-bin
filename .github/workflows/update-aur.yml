@@ -30,11 +30,12 @@ jobs:
     container:
       image: archlinux:base-devel
     steps:
-      - uses: actions/checkout@v4
-
-      # makepkg 需要 base-devel 环境；容器里补一下 git/curl 以防镜像缺省
-      - name: Ensure tools
+      # 容器镜像默认没有 git：必须先装好再 checkout，否则 checkout 会
+      # 退化为 REST API 下载 tar 包（没有 .git 目录，后续 git 操作全部失败）
+      - name: Ensure tools (git/curl)
         run: pacman -Sy --noconfirm --needed git curl
+
+      - uses: actions/checkout@v4
 
       # makepkg 拒绝以 root 运行，因此用 builder 用户执行更新脚本
       - name: Check for new Zed release and update PKGBUILD
