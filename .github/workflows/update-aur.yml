@@ -37,10 +37,13 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      # makepkg 拒绝以 root 运行，因此用 builder 用户执行更新脚本
+      # makepkg 拒绝以 root 运行，因此用 builder 用户执行更新脚本；
+      # 工作区 chown 给 builder 后，root 再跑 git 会触发 dubious ownership 校验，
+      # 先加 safe.directory 白名单（写入全局配置，本 job 后续步骤均生效）
       - name: Check for new Zed release and update PKGBUILD
         id: update
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           useradd -m builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
           before="$(git rev-parse HEAD)"
