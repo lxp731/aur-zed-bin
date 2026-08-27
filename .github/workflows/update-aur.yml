@@ -36,7 +36,11 @@ jobs:
       - name: Ensure tools (git/curl/openssh)
         run: pacman -Sy --noconfirm --needed git curl openssh
 
+      # 完整克隆（fetch-depth: 0）：浅克隆缺少中间提交，
+      # 会导致向 AUR push 时被判定为"非快进"而拒绝
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # makepkg 拒绝以 root 运行，因此用 builder 用户执行更新脚本；
       # 工作区 chown 给 builder 后，root 再跑 git 会触发 dubious ownership 校验，
