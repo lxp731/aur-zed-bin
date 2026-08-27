@@ -30,10 +30,11 @@ jobs:
     container:
       image: archlinux:base-devel
     steps:
-      # 容器镜像默认没有 git：必须先装好再 checkout，否则 checkout 会
-      # 退化为 REST API 下载 tar 包（没有 .git 目录，后续 git 操作全部失败）
-      - name: Ensure tools (git/curl)
-        run: pacman -Sy --noconfirm --needed git curl
+      # 容器镜像默认没有 git/openssh：必须先装好再 checkout，否则 checkout 会
+      # 退化为 REST API 下载 tar 包（没有 .git 目录，后续 git 操作全部失败），
+      # 且 AUR 推送（SSH）也依赖 openssh
+      - name: Ensure tools (git/curl/openssh)
+        run: pacman -Sy --noconfirm --needed git curl openssh
 
       - uses: actions/checkout@v7
 
