@@ -1,0 +1,67 @@
+# 自动更新 zed-bin：检测 Zed 官方新版本 -> 更新 PKGBUILD/.SRCINFO -> 推送到 GitHub 和 AUR
+#
+# 仓库结构：这个仓库同时作为 GitHub 镜像和 AUR 包的来源。
+#   - 定时（每 6 小时）检查 zed-industries/zed 的最新 stable release
+#   - 发现新版本后自动 bump pkgver、刷新 sha256sums、重新生成 .SRCINFO 并提交
+#   - 提交推送到本 GitHub 仓库，同时推送到 AUR（aur.archlinux.org/zed-bin）
+#   - 手动 push 到这个 GitHub 仓库的提交也会被同步到 AUR（on: push）
+#
+# 使用前配置（一次性）：
+#   1. 在 GitHub 上创建仓库并把本目录推上去（保留 master 分支名）
+#   2. 在 Settings -> Secrets and variables -> Actions 添加 secret：
+#        AUR_SSH_PRIVATE_KEY = 你在 AUR 账号里注册过的 SSH 私钥内容
+#   3. 手动跑一次 workflow（Actions -> Update zed-bin on AUR -> Run workflow）验证
+name: Update zed-bin on AUR
+
+on:
+  schedule:
+    # 每 6 小时检查一次（UTC 时间的 :17 分触发）
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [master, main]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v4
+
+      # makepkg 需要 base-devel 环境；容器里补一下 git/curl 以防镜像缺省
+      - name: Ensure tools
+        run: pacman -Sy --noconfirm --needed git curl
+
+      # makepkg 拒绝以 root 运行，因此用 builder 用户执行更新脚本
+      - name: Check for new Zed release and update PKGBUILD
+        id: update
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          before="$(git rev-parse HEAD)"
+          su builder -s /bin/bash -c "bash '$GITHUB_WORKSPACE/scripts/update-pkgbuild.sh'"
+          after="$(git rev-parse HEAD)"
+          if [ "$before" != "$after" ] || [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push to GitHub mirror
+        if: steps.update.outputs.changed == 'true'
+        run: git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Push to AUR
+        if: steps.update.outputs.changed == 'true'
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$HOME/.ssh/aur"
+          chmod 600 "$HOME/.ssh/aur"
+          printf 'Host aur.archlinux.org\n  IdentityFile %s/.ssh/aur\n  StrictHostKeyChecking accept-new\n' "$HOME" > "$HOME/.ssh/config"
+          git push ssh://aur@aur.archlinux.org/zed-bin.git "HEAD:master"
