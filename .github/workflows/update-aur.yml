@@ -70,6 +70,8 @@ jobs:
           chmod 700 "$HOME/.ssh"
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$HOME/.ssh/aur"
           chmod 600 "$HOME/.ssh/aur"
-          printf 'Host aur.archlinux.org\n  IdentityFile %s/.ssh/aur\n  IdentitiesOnly yes\n  StrictHostKeyChecking accept-new\n' "$HOME" > "$HOME/.ssh/config"
-          chmod 600 "$HOME/.ssh/config"
+          # 显式覆盖 GIT_SSH_COMMAND（checkout 可能注入了自己的 SSH 配置），
+          # -F /dev/null 不读任何 ssh 配置文件，全部参数走命令行；
+          # 连接安全性由 AUR 私钥本身保证
+          export GIT_SSH_COMMAND="ssh -F /dev/null -i '$HOME/.ssh/aur' -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           git push ssh://aur@aur.archlinux.org/zed-bin.git "HEAD:master"
