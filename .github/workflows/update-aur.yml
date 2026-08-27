@@ -55,12 +55,13 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # 推送无条件执行：没有新版本时 push 是空操作（Everything up-to-date）；
+      # 一旦 GitHub 领先（含上次 AUR push 失败、手动提交等场景），自动把 AUR 补齐，
+      # 保证 AUR master 永远等于 GitHub master
       - name: Push to GitHub mirror
-        if: steps.update.outputs.changed == 'true'
         run: git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Push to AUR
-        if: steps.update.outputs.changed == 'true'
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
