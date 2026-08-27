@@ -1,10 +1,15 @@
 # 自动更新 zed-bin：检测 Zed 官方新版本 -> 更新 PKGBUILD/.SRCINFO -> 推送到 GitHub 和 AUR
 #
-# 仓库结构：这个仓库同时作为 GitHub 镜像和 AUR 包的来源。
+# 仓库结构（两个仓库内容不同）：
+#   - GitHub 仓库（本仓库，master）：开发镜像，含 PKGBUILD/.SRCINFO/.github/scripts 等
+#   - AUR 仓库（aur.archlinux.org/zed-bin）：只含顶层文件（PKGBUILD/.SRCINFO/.gitignore）
+#     —— AUR 的 push hook 会拒绝任何包含子目录的提交！
+#
+# 流程：
 #   - 定时（每 6 小时）检查 zed-industries/zed 的最新 stable release
-#   - 发现新版本后自动 bump pkgver、刷新 sha256sums、重新生成 .SRCINFO 并提交
-#   - 提交推送到本 GitHub 仓库，同时推送到 AUR（aur.archlinux.org/zed-bin）
-#   - 手动 push 到这个 GitHub 仓库的提交也会被同步到 AUR（on: push）
+#   - 发现新版本：bump pkgver -> 刷新 sha256sums -> 重新生成 .SRCINFO -> 提交并 push 到 GitHub
+#   - 无条件把最新的 PKGBUILD/.SRCINFO 同步到 AUR（无变化时为空操作）
+#   - 手动 push 到这个 GitHub 仓库的 PKGBUILD/.SRCINFO 改动也会被同步到 AUR（on: push）
 #
 # 使用前配置（一次性）：
 #   1. 在 GitHub 上创建仓库并把本目录推上去（保留 master 分支名）
@@ -37,7 +42,7 @@ jobs:
         run: pacman -Sy --noconfirm --needed git curl openssh
 
       # 完整克隆（fetch-depth: 0）：浅克隆缺少中间提交，
-      # 会导致向 AUR push 时被判定为"非快进"而拒绝
+      # 会导致 push 时被判定为"非快进"而拒绝
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -60,13 +65,14 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # 推送无条件执行：没有新版本时 push 是空操作（Everything up-to-date）；
-      # 一旦 GitHub 领先（含上次 AUR push 失败、手动提交等场景），自动把 AUR 补齐，
-      # 保证 AUR master 永远等于 GitHub master
-      - name: Push to GitHub mirror
+      # 无条件推送 GitHub（无新提交时是空操作）
+      - name: Push to GitHub
         run: git push origin "HEAD:${GITHUB_REF_NAME}"
 
-      - name: Push to AUR
+      # 同步到 AUR：单独克隆一份干净仓库（只有顶层文件），只拷贝
+      # PKGBUILD/.SRCINFO 两个文件。无改动时 push 为空操作；一旦 GitHub
+      # 领先（含上次同步失败、手动提交等场景），自动把 AUR 补齐。
+      - name: Sync PKGBUILD/.SRCINFO to AUR
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
@@ -78,4 +84,16 @@ jobs:
           # -F /dev/null 不读任何 ssh 配置文件，全部参数走命令行；
           # 连接安全性由 AUR 私钥本身保证
           export GIT_SSH_COMMAND="ssh -F /dev/null -i '$HOME/.ssh/aur' -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          git push ssh://aur@aur.archlinux.org/zed-bin.git "HEAD:master"
+          rm -rf "$HOME/aur-sync"
+          git clone "ssh://aur@aur.archlinux.org/zed-bin.git" "$HOME/aur-sync"
+          cd "$HOME/aur-sync"
+          git config user.name "knight731"
+          git config user.email "liuxiaopeng731@gmail.com"
+          cp "$GITHUB_WORKSPACE/PKGBUILD" "$GITHUB_WORKSPACE/.SRCINFO" .
+          if git status --porcelain | grep -qE 'PKGBUILD|\.SRCINFO'; then
+            pkgver="$(sed -n 's/^pkgver=//p' PKGBUILD)"
+            pkgrel="$(sed -n 's/^pkgrel=//p' PKGBUILD)"
+            git add PKGBUILD .SRCINFO
+            git commit -m "upgpkg: zed-bin ${pkgver}-${pkgrel}"
+          fi
+          git push origin master
