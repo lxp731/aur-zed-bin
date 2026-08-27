@@ -67,7 +67,9 @@ jobs:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
           mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$HOME/.ssh/aur"
           chmod 600 "$HOME/.ssh/aur"
-          printf 'Host aur.archlinux.org\n  IdentityFile %s/.ssh/aur\n  StrictHostKeyChecking accept-new\n' "$HOME" > "$HOME/.ssh/config"
+          printf 'Host aur.archlinux.org\n  IdentityFile %s/.ssh/aur\n  IdentitiesOnly yes\n  StrictHostKeyChecking accept-new\n' "$HOME" > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
           git push ssh://aur@aur.archlinux.org/zed-bin.git "HEAD:master"
