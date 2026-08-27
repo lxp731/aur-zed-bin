@@ -35,7 +35,7 @@ jobs:
       - name: Ensure tools (git/curl)
         run: pacman -Sy --noconfirm --needed git curl
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # makepkg 拒绝以 root 运行，因此用 builder 用户执行更新脚本；
       # 工作区 chown 给 builder 后，root 再跑 git 会触发 dubious ownership 校验，
