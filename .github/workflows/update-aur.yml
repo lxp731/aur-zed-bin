@@ -37,9 +37,10 @@ jobs:
     steps:
       # 容器镜像默认没有 git/openssh：必须先装好再 checkout，否则 checkout 会
       # 退化为 REST API 下载 tar 包（没有 .git 目录，后续 git 操作全部失败），
-      # 且 AUR 推送（SSH）也依赖 openssh
-      - name: Ensure tools (git/curl/openssh)
-        run: pacman -Sy --noconfirm --needed git curl openssh
+      # 且 AUR 推送（SSH）也依赖 openssh。pacman-contrib 提供 updpkgsums
+      #（刷新 sha256sums 用，base-devel 组里没有，必须显式安装）
+      - name: Ensure tools (git/curl/openssh/pacman-contrib)
+        run: pacman -Sy --noconfirm --needed git curl openssh pacman-contrib
 
       # 完整克隆（fetch-depth: 0）：浅克隆缺少中间提交，
       # 会导致 push 时被判定为"非快进"而拒绝
